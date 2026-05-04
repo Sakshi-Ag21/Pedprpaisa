@@ -1,36 +1,118 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PedprPaisa — Personal Finance Tracker
 
-## Getting Started
+A production-ready, premium personal finance web application built for salaried professionals in India.
 
-First, run the development server:
+## Tech Stack
+
+- **Frontend**: Next.js 15 (App Router) + TypeScript
+- **Styling**: Tailwind CSS v4 + custom design system
+- **Backend/Auth/DB**: Supabase (PostgreSQL + Auth)
+- **Charts**: Recharts
+- **Deployment**: Vercel
+
+## Features
+
+- Dashboard with income, expenses, savings, investments overview
+- Transaction tracking with categories, payment methods, emotional tags
+- Savings goals with progress tracking and contributions
+- Subscription manager with renewal reminders
+- Investment portfolio tracker
+- Reports with CSV export and 12-month charts
+- Google OAuth + email/password auth
+- Dark/light mode
+- Mobile-first responsive design
+- Row Level Security (Supabase RLS)
+
+## Quick Start
+
+### 1. Clone and install
+
+```bash
+git clone <repo>
+cd pedprpaisa
+npm install
+```
+
+### 2. Set up Supabase
+
+1. Create a project at [app.supabase.com](https://app.supabase.com)
+2. Go to SQL Editor and run `supabase/schema.sql`
+3. Enable Google Auth in Authentication > Providers (optional)
+4. Add your site URL in Authentication > URL Configuration
+
+### 3. Configure environment
+
+```bash
+cp .env.local.example .env.local
+```
+
+Fill in:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
+
+### 4. Run locally
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy to Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Push to GitHub
+2. Import repo at [vercel.com](https://vercel.com)
+3. Add environment variables in Vercel dashboard
+4. Deploy
 
-## Learn More
+## Database Schema
 
-To learn more about Next.js, take a look at the following resources:
+Run `supabase/schema.sql` in your Supabase SQL Editor. It creates:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Table | Purpose |
+|-------|---------|
+| `profiles` | User settings, salary info |
+| `transactions` | All income/expense entries |
+| `categories` | Default + custom categories |
+| `goals` | Savings goals |
+| `goal_contributions` | Goal fund additions |
+| `subscriptions` | Recurring payments |
+| `investments` | Investment portfolio |
+| `budgets` | Category budgets |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+All tables have Row Level Security — users can only access their own data.
 
-## Deploy on Vercel
+## Project Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+src/
+  app/
+    auth/           # Login, signup, OAuth callback
+    dashboard/      # All app pages
+      transactions/ # Expense/income tracking
+      goals/        # Savings goals
+      subscriptions/# Recurring payments
+      investments/  # Portfolio tracker
+      reports/      # Analytics & export
+      settings/     # User preferences
+  components/
+    ui/             # Button, Input, Dialog, etc.
+    layout/         # Sidebar, Topbar
+    dashboard/      # Charts, StatCards
+    providers/      # Auth, Theme
+  lib/
+    supabase/       # Client, server, middleware
+    utils.ts        # Helpers, formatters
+  types/
+    database.ts     # TypeScript types
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Security
+
+- Supabase RLS ensures data isolation per user
+- Auth handled by Supabase (JWT-based)
+- No sensitive data in client bundles
+- HTTPS enforced on Vercel
+- Input validation on all forms
