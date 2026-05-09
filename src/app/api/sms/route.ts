@@ -9,7 +9,6 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { sms, secret, user_email } = body
 
-    // Validate secret
     if (!SMS_SECRET || secret !== SMS_SECRET) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -18,35 +17,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing sms field' }, { status: 400 })
     }
 
-    // Parse the SMS
     const parsed = parseBankSMS(sms)
     if (!parsed) {
       return NextResponse.json({ error: 'Could not parse SMS as a transaction' }, { status: 422 })
     }
 
     const supabase = createServiceClient()
-
-    // Find user by email
     const email = user_email || process.env.SMS_DEFAULT_EMAIL
+
     if (!email) {
       return NextResponse.json({ error: 'No user email provided' }, { status: 400 })
     }
 
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', email)
-      .single()
-
-    if (!profile) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    // Look up user via auth.users (requires service role)
+    const { data: authData, error: authError } = await supabase.auth.admin.listUsers()
+    if (authError) {
+      return NextResponse.json({ error: `Auth error: ${authError.message}` }, { status: 500 })
     }
+
+    const authUser = authData.users.find(u => u.email === email)
+    if (!authUser) {
+      return NextResponse.json({ error: `No auth user found for ${email}` }, { status: 404 })
+    }
+
+    const userId = authUser.id
 
     // Find best matching category
     const { data: categories } = await supabase
       .from('categories')
       .select('id, name, type')
-      .or(`user_id.eq.${profile.id},is_default.eq.true`)
+      .or(`user_id.eq.${userId},is_default.eq.true`)
 
     let category_id = null
     if (categories) {
@@ -61,14 +61,14 @@ export async function POST(req: NextRequest) {
     const { data: transaction, error } = await supabase
       .from('transactions')
       .insert({
-        user_id: profile.id,
+        user_id: userId,
         title: parsed.merchant ? `Payment at ${parsed.merchant}` : parsed.type === 'income' ? 'Amount Received' : 'Payment',
         amount: parsed.amount,
         type: parsed.type,
         category_id,
         payment_method: parsed.payment_method,
         date: parsed.date,
-        notes: `Auto-logged from SMS`,
+        notes: 'Auto-logged from SMS',
       })
       .select('id, title, amount, type')
       .single()
