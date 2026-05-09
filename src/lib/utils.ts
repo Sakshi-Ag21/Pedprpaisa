@@ -96,6 +96,48 @@ export const EMOTIONAL_TAGS = [
   { value: 'regret', label: 'Regret', color: '#64748b', emoji: '😔' },
 ]
 
+export interface ParsedSMS {
+  amount: number
+  type: 'income' | 'expense'
+  merchant: string
+  payment_method: 'upi' | 'card' | 'cash' | 'bank_transfer' | 'other'
+  date: string
+}
+
+export function parseBankSMS(text: string): ParsedSMS | null {
+  const t = text.trim()
+
+  // Amount patterns: Rs.500, Rs 500, INR 500, ₹500, Rs.1,234.56
+  const amountMatch = t.match(/(?:rs\.?|inr|₹)\s*([\d,]+(?:\.\d{1,2})?)/i)
+  if (!amountMatch) return null
+  const amount = parseFloat(amountMatch[1].replace(/,/g, ''))
+  if (isNaN(amount) || amount <= 0) return null
+
+  // Type: debit = expense, credit = income
+  const isDebit = /debited|debit|spent|paid|payment|withdrawn|deducted|charged/i.test(t)
+  const isCredit = /credited|credit|received|added|deposited|refund/i.test(t)
+  if (!isDebit && !isCredit) return null
+  const type: 'income' | 'expense' = isCredit ? 'income' : 'expense'
+
+  // Merchant: "at MERCHANT", "to MERCHANT", "from MERCHANT", "VPA merchant@upi"
+  let merchant = ''
+  const atMatch = t.match(/(?:at|to|from|towards)\s+([A-Za-z0-9 &\-_\.@]+?)(?:\s+on|\s+via|\s+for|\s+ref|\s+upi|\.|,|$)/i)
+  const vpaMatch = t.match(/vpa\s+([^\s]+)/i)
+  if (atMatch) merchant = atMatch[1].trim()
+  else if (vpaMatch) merchant = vpaMatch[1].split('@')[0].trim()
+
+  // Payment method
+  let payment_method: ParsedSMS['payment_method'] = 'other'
+  if (/upi|gpay|phonepe|paytm|bhim/i.test(t)) payment_method = 'upi'
+  else if (/card|credit card|debit card/i.test(t)) payment_method = 'card'
+  else if (/neft|imps|rtgs|bank transfer/i.test(t)) payment_method = 'bank_transfer'
+  else if (/cash/i.test(t)) payment_method = 'cash'
+
+  const date = new Date().toISOString().split('T')[0]
+
+  return { amount, type, merchant, payment_method, date }
+}
+
 export const GOAL_CATEGORIES = [
   { value: 'emergency_fund', label: 'Emergency Fund', icon: '🛡️' },
   { value: 'travel', label: 'Travel', icon: '✈️' },

@@ -11,8 +11,8 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toaster'
-import { Plus, Search, Pencil, Trash2, ArrowUpCircle, Copy, LayoutList, LayoutGrid } from 'lucide-react'
-import { formatCurrency, formatDate, PAYMENT_METHODS, EMOTIONAL_TAGS } from '@/lib/utils'
+import { Plus, Search, Pencil, Trash2, ArrowUpCircle, Copy, LayoutList, LayoutGrid, MessageSquare } from 'lucide-react'
+import { formatCurrency, formatDate, PAYMENT_METHODS, EMOTIONAL_TAGS, parseBankSMS } from '@/lib/utils'
 import type { Transaction, Category } from '@/types/database'
 
 type TxWithCat = Transaction & { categories: { name: string; icon: string; color: string } | null }
@@ -44,6 +44,9 @@ export function TransactionsClient({ transactions: initial, categories, userId }
   const [saving, setSaving] = useState(false)
   const [duplicating, setDuplicating] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [smsOpen, setSmsOpen] = useState(false)
+  const [smsText, setSmsText] = useState('')
+  const [smsError, setSmsError] = useState('')
   const supabase = createClient()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -85,6 +88,35 @@ export function TransactionsClient({ transactions: initial, categories, userId }
     const names = new Set(transactions.map(t => t.categories?.name ?? 'Uncategorized'))
     return Array.from(names).sort()
   }, [transactions])
+
+  function handleSMSParse() {
+    setSmsError('')
+    const parsed = parseBankSMS(smsText)
+    if (!parsed) {
+      setSmsError('Could not read this message. Try a bank debit/credit SMS.')
+      return
+    }
+    const matchedCat = categories.find(c =>
+      (parsed.type === 'income' && (c.type === 'income' || c.type === 'both')) ||
+      (parsed.type === 'expense' && (c.type === 'expense' || c.type === 'both'))
+    )
+    setEditing(null)
+    setDuplicating(null)
+    setForm({
+      title: parsed.merchant ? `Payment at ${parsed.merchant}` : parsed.type === 'income' ? 'Amount Received' : 'Payment',
+      amount: String(parsed.amount),
+      type: parsed.type,
+      category_id: matchedCat?.id ?? '',
+      payment_method: parsed.payment_method,
+      date: parsed.date,
+      notes: '',
+      emotional_tag: 'none',
+      merchant: parsed.merchant,
+    })
+    setSmsOpen(false)
+    setSmsText('')
+    setOpen(true)
+  }
 
   function openAdd() {
     setEditing(null)
@@ -237,6 +269,9 @@ export function TransactionsClient({ transactions: initial, categories, userId }
               <LayoutGrid className="h-4 w-4" />
             </button>
           </div>
+          <Button onClick={() => { setSmsText(''); setSmsError(''); setSmsOpen(true) }} variant="outline" size="sm" className="gap-2">
+            <MessageSquare className="h-4 w-4" /> Paste SMS
+          </Button>
           <Button onClick={openAdd} variant="bloom" size="sm" className="gap-2">
             <Plus className="h-4 w-4" /> Add
           </Button>
@@ -359,6 +394,31 @@ export function TransactionsClient({ transactions: initial, categories, userId }
           </div>
         )}
       </div>
+
+      {/* SMS Parser Dialog */}
+      <Dialog open={smsOpen} onOpenChange={setSmsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl font-light">Paste Bank SMS</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">Paste any bank debit/credit SMS and we&apos;ll extract the details automatically.</p>
+            <textarea
+              className="w-full rounded-lg border border-border bg-background p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring min-h-[120px]"
+              placeholder={`e.g. "Your A/c XXXX1234 is debited with Rs.1,500.00 on 09-May-25 at SWIGGY. UPI Ref: 123456"`}
+              value={smsText}
+              onChange={e => { setSmsText(e.target.value); setSmsError('') }}
+            />
+            {smsError && <p className="text-xs text-destructive">{smsError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSmsOpen(false)}>Cancel</Button>
+            <Button variant="bloom" onClick={handleSMSParse} disabled={!smsText.trim()}>
+              Parse & Fill
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add/Edit/Duplicate Dialog */}
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setDuplicating(null) }}>
