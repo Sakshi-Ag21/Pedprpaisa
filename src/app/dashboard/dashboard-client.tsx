@@ -71,6 +71,11 @@ export function DashboardClient({ transactions, allTransactions, goals, subscrip
     })
   }, [allTransactions])
 
+  const totalGoalSavings = goals
+    .filter(g => g.status === 'active' && g.auto_save_amount > 0)
+    .reduce((s, g) => s + g.auto_save_amount, 0)
+  const availableBalance = savings - totalGoalSavings
+
   const totalInvestments = investments.reduce((s, i) => s + (i.current_value ?? i.invested_amount), 0)
   const totalSubscriptionCost = subscriptions.reduce((s, sub) => s + sub.amount, 0)
   const upcomingBills = subscriptions
@@ -120,9 +125,9 @@ export function DashboardClient({ transactions, allTransactions, goals, subscrip
             variant="petal"
           />
           <StatCard
-            title="Liquid Harvest"
-            value={formatCompact(savings)}
-            subtitle="net this season"
+            title="Available Balance"
+            value={formatCompact(availableBalance)}
+            subtitle={totalGoalSavings > 0 ? `−${formatCompact(totalGoalSavings)} reserved for goals` : 'net this season'}
             icon={PiggyBank}
           />
           <StatCard
