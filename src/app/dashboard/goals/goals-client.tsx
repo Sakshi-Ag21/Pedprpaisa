@@ -98,21 +98,45 @@ export function GoalsClient({ goals: initial, userId }: Props) {
   async function handleContribute() {
     if (!contributeGoal || !contributeAmount) return
     const amount = parseFloat(contributeAmount)
+    const today = new Date().toISOString().split('T')[0]
     const newAmount = Math.min(contributeGoal.current_amount + amount, contributeGoal.target_amount)
     const isComplete = newAmount >= contributeGoal.target_amount
 
-    const { error: contribError } = await supabase.from('goal_contributions').insert({
-      goal_id: contributeGoal.id, user_id: userId, amount, date: new Date().toISOString().split('T')[0],
-    })
-    const { data, error } = await supabase.from('goals').update({
-      current_amount: newAmount, status: isComplete ? 'completed' : 'active',
-    }).eq('id', contributeGoal.id).select().single()
+    // Find savings category
+    const { data: categories } = await supabase
+      .from('categories')
+      .select('id, name')
+      .or(`user_id.eq.${userId},is_default.eq.true`)
 
-    if (contribError || error) {
-      toast({ title: 'Error', variant: 'destructive' })
+    const savingsCat = categories?.find(c =>
+      /saving|invest|goal/i.test(c.name)
+    ) ?? categories?.[0]
+
+    // Run all three operations
+    const [contribResult, goalResult, txResult] = await Promise.all([
+      supabase.from('goal_contributions').insert({
+        goal_id: contributeGoal.id, user_id: userId, amount, date: today,
+      }),
+      supabase.from('goals').update({
+        current_amount: newAmount, status: isComplete ? 'completed' : 'active',
+      }).eq('id', contributeGoal.id).select().single(),
+      supabase.from('transactions').insert({
+        user_id: userId,
+        title: `Saved for: ${contributeGoal.name}`,
+        amount,
+        type: 'expense',
+        category_id: savingsCat?.id ?? null,
+        payment_method: 'bank_transfer',
+        date: today,
+        notes: `Goal contribution`,
+      }),
+    ])
+
+    if (contribResult.error || goalResult.error || txResult.error) {
+      toast({ title: 'Error', description: contribResult.error?.message ?? goalResult.error?.message ?? txResult.error?.message, variant: 'destructive' })
     } else {
-      setGoals(prev => prev.map(g => g.id === contributeGoal.id ? data : g))
-      toast({ title: isComplete ? '🎉 Goal completed!' : `+${formatCurrency(amount)} added` })
+      setGoals(prev => prev.map(g => g.id === contributeGoal.id ? goalResult.data as Goal : g))
+      toast({ title: isComplete ? '🎉 Goal completed!' : `+${formatCurrency(amount)} saved — deducted from balance` })
       setContributeOpen(false)
       setContributeAmount('')
     }
