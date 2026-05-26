@@ -12,7 +12,7 @@ import {
 import {
   formatCurrency, formatCompact, formatDate, getDaysUntil,
   getProgressPercentage, calculateSavingsRate, getFinancialHealthScore,
-  getMonthName,
+  getMonthName, isWeekend,
 } from '@/lib/utils'
 import type { Transaction, Goal, Subscription, Profile, Investment, Category } from '@/types/database'
 import Link from 'next/link'
@@ -29,9 +29,10 @@ interface Props {
   investments: Investment[]
   categories?: Category[]
   userId?: string
+  weekendBudget?: number
 }
 
-export function DashboardClient({ transactions, allTransactions, goals, subscriptions, profile, investments }: Props) {
+export function DashboardClient({ transactions, allTransactions, goals, subscriptions, profile, investments, weekendBudget = 0 }: Props) {
 
   const { income, expenses, savings, savingsRate } = useMemo(() => {
     const income = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
@@ -70,6 +71,16 @@ export function DashboardClient({ transactions, allTransactions, goals, subscrip
       return { month: getMonthName(monthIdx), income: data.income, expenses: data.expenses, savings: data.income - data.expenses }
     })
   }, [allTransactions])
+
+  // Weekend pocket: sum of expenses on Sat/Sun this month
+  const weekendSpent = useMemo(() => {
+    return transactions
+      .filter(t => t.type === 'expense' && isWeekend(t.date))
+      .reduce((s, t) => s + t.amount, 0)
+  }, [transactions])
+
+  // Goal pocket: total current_amount saved across active goals
+  const goalPocketSaved = goals.reduce((s, g) => s + g.current_amount, 0)
 
   const totalGoalSavings = goals
     .filter(g => g.status === 'active' && g.auto_save_amount > 0)
@@ -264,6 +275,83 @@ export function DashboardClient({ transactions, allTransactions, goals, subscrip
             )}
           </div>
         </div>
+
+        {/* Money Map */}
+        {income > 0 && (
+          <div className="flora-card p-5">
+            <div className="flex items-center justify-between mb-4">
+              <p className="label-spaced">Money Map · This Month</p>
+              <Link href="/dashboard/settings" className="text-xs text-primary hover:underline">Set budgets →</Link>
+            </div>
+            <div className="space-y-3">
+              {/* Income bar */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" /> Income</span>
+                <span className="font-medium text-emerald-500">{formatCurrency(income)}</span>
+              </div>
+
+              {/* Expenses */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="flex items-center gap-2 text-muted-foreground"><span className="h-2.5 w-2.5 rounded-full bg-primary/70 inline-block" /> Expenses</span>
+                <span className="font-medium">− {formatCurrency(expenses)}</span>
+              </div>
+
+              {/* Goal pocket */}
+              {goalPocketSaved > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    <span className="h-2.5 w-2.5 rounded-full bg-indigo-400 inline-block" /> 🎯 Goals saved
+                    <span className="text-xs text-muted-foreground/60">({goals.length} visions)</span>
+                  </span>
+                  <span className="font-medium text-indigo-400">{formatCurrency(goalPocketSaved)}</span>
+                </div>
+              )}
+
+              {/* Weekend pocket */}
+              {weekendBudget > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    <span className={`h-2.5 w-2.5 rounded-full inline-block ${weekendSpent > weekendBudget ? 'bg-red-400' : 'bg-amber-400'}`} />
+                    🎉 Weekend pocket
+                  </span>
+                  <span className={`font-medium ${weekendSpent > weekendBudget ? 'text-red-400' : 'text-amber-500'}`}>
+                    {formatCurrency(weekendSpent)} / {formatCurrency(weekendBudget)}
+                  </span>
+                </div>
+              )}
+
+              <div className="flora-rule" />
+
+              {/* Free to spend */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-sage inline-block" /> Free to spend
+                </span>
+                <span className={`text-base font-semibold ${savings >= 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                  {formatCurrency(Math.max(savings, 0))}
+                </span>
+              </div>
+
+              {/* Progress bar showing expense ratio */}
+              {income > 0 && (
+                <div className="space-y-1 pt-1">
+                  <div className="relative h-2 rounded-full bg-accent overflow-hidden">
+                    <div className="absolute inset-y-0 left-0 rounded-full bg-primary/60 transition-all" style={{ width: `${Math.min((expenses / income) * 100, 100)}%` }} />
+                    {weekendBudget > 0 && (
+                      <div className="absolute inset-y-0 rounded-full bg-amber-400/60 transition-all"
+                        style={{ left: `${Math.min((expenses / income) * 100, 100)}%`, width: `${Math.min((Math.min(weekendSpent, weekendBudget) / income) * 100, 100 - (expenses / income) * 100)}%` }} />
+                    )}
+                  </div>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>{Math.round((expenses / income) * 100)}% spent</span>
+                    {weekendBudget > 0 && <span className="text-amber-500">{Math.round((weekendSpent / weekendBudget) * 100)}% of weekend pocket used</span>}
+                    <span className="text-emerald-500">{Math.round((savings / income) * 100)}% saved</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Recent Journal Entries */}
         <div className="flora-card p-5">

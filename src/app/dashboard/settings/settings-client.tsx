@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from '@/components/ui/toaster'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { User, IndianRupee, Bell, Shield } from 'lucide-react'
+import { User, IndianRupee, Bell, Shield, CalendarDays } from 'lucide-react'
 import type { Profile } from '@/types/database'
 
 interface Props { profile: Profile | null; userId: string; email: string }
@@ -20,6 +20,7 @@ export function SettingsClient({ profile, userId, email }: Props) {
     monthly_salary: String(profile?.monthly_salary ?? ''),
     salary_date: String(profile?.salary_date ?? '1'),
     currency: profile?.currency ?? 'INR',
+    weekend_budget: String(profile?.weekend_budget ?? ''),
   })
   const [saving, setSaving] = useState(false)
   const [loggingSalary, setLoggingSalary] = useState(false)
@@ -44,6 +45,7 @@ export function SettingsClient({ profile, userId, email }: Props) {
       monthly_salary: parseFloat(form.monthly_salary) || 0,
       salary_date: parseInt(form.salary_date) || 1,
       currency: form.currency,
+      weekend_budget: parseFloat(form.weekend_budget) || 0,
     })
     if (error) {
       toast({ title: 'Error saving', description: error, variant: 'destructive' })
@@ -110,6 +112,30 @@ export function SettingsClient({ profile, userId, email }: Props) {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+        </div>
+
+        {/* Weekend Budget */}
+        <div className="glass-card p-5 space-y-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10">
+              <CalendarDays className="h-4 w-4 text-amber-500" />
+            </div>
+            <div>
+              <h2 className="font-semibold">Weekend Pocket</h2>
+              <p className="text-xs text-muted-foreground">Money you allow yourself to spend on Sat &amp; Sun each month</p>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Weekend Budget per Month (₹)</Label>
+            <Input
+              type="number" min="0" placeholder="e.g. 5000"
+              value={form.weekend_budget}
+              onChange={e => setForm(f => ({ ...f, weekend_budget: e.target.value }))}
+            />
+            <p className="text-xs text-muted-foreground">
+              All your transactions on Saturdays &amp; Sundays this month will be tracked against this pocket.
+            </p>
           </div>
         </div>
 

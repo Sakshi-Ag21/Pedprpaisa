@@ -36,6 +36,14 @@ export function formatDateShort(date: string | Date): string {
   }).format(new Date(date))
 }
 
+export function isWeekend(dateStr: string): boolean {
+  // Parse as local date to avoid UTC shift issues
+  const [year, month, day] = dateStr.split('-').map(Number)
+  const d = new Date(year, month - 1, day)
+  const dow = d.getDay()
+  return dow === 0 || dow === 6 // 0=Sun, 6=Sat
+}
+
 export function getDaysUntil(date: string | Date): number {
   const target = new Date(date)
   const today = new Date()

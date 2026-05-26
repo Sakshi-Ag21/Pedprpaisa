@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toaster'
 import { Plus, Search, Pencil, Trash2, ArrowUpCircle, Copy, LayoutList, LayoutGrid, MessageSquare } from 'lucide-react'
-import { formatCurrency, formatDate, PAYMENT_METHODS, EMOTIONAL_TAGS, parseBankSMS } from '@/lib/utils'
+import { formatCurrency, formatDate, PAYMENT_METHODS, EMOTIONAL_TAGS, parseBankSMS, isWeekend } from '@/lib/utils'
+import { Progress } from '@/components/ui/progress'
 import type { Transaction, Category } from '@/types/database'
 
 type TxWithCat = Transaction & { categories: { name: string; icon: string; color: string } | null }
@@ -21,6 +22,7 @@ interface Props {
   transactions: TxWithCat[]
   categories: Category[]
   userId: string
+  weekendBudget: number
 }
 
 const EMPTY_FORM = {
@@ -31,7 +33,7 @@ const EMPTY_FORM = {
   merchant: '',
 }
 
-export function TransactionsClient({ transactions: initial, categories, userId }: Props) {
+export function TransactionsClient({ transactions: initial, categories, userId, weekendBudget }: Props) {
   const [transactions, setTransactions] = useState(initial)
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all')
@@ -211,6 +213,18 @@ export function TransactionsClient({ transactions: initial, categories, userId }
   const totalIncome = filtered.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
   const totalExpenses = filtered.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
 
+  // Weekend pocket: sum of expenses on Sat/Sun this calendar month (across all transactions, not just filtered)
+  const weekendSpent = useMemo(() => {
+    const now = new Date()
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    return transactions
+      .filter(t => t.type === 'expense' && t.date.startsWith(thisMonth) && isWeekend(t.date))
+      .reduce((s, t) => s + t.amount, 0)
+  }, [transactions])
+
+  const weekendPct = weekendBudget > 0 ? Math.min(Math.round((weekendSpent / weekendBudget) * 100), 100) : 0
+  const weekendOver = weekendBudget > 0 && weekendSpent > weekendBudget
+
   return (
     <div className="flex flex-col">
       <Topbar title="Transactions" description="Track every rupee in and out" />
@@ -229,6 +243,36 @@ export function TransactionsClient({ transactions: initial, categories, userId }
             </div>
           ))}
         </div>
+
+        {/* Weekend Pocket */}
+        {weekendBudget > 0 && (
+          <div className={`flora-card p-4 border ${weekendOver ? 'border-red-400/40 bg-red-500/5' : 'border-amber-400/20 bg-amber-500/5'}`}>
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🎉</span>
+                <div>
+                  <p className="text-sm font-medium">Weekend Pocket</p>
+                  <p className="text-xs text-muted-foreground">Sat &amp; Sun spending this month</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className={`text-sm font-semibold ${weekendOver ? 'text-red-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                  {weekendOver ? `₹${Math.round(weekendSpent - weekendBudget).toLocaleString('en-IN')} over!` : `₹${Math.round(weekendBudget - weekendSpent).toLocaleString('en-IN')} left`}
+                </p>
+                <p className="text-xs text-muted-foreground">{weekendPct}% used</p>
+              </div>
+            </div>
+            <Progress
+              value={weekendPct}
+              className="h-1.5"
+              style={weekendOver ? { '--progress-color': '#f87171' } as React.CSSProperties : { '--progress-color': '#f59e0b' } as React.CSSProperties}
+            />
+            <div className="flex justify-between text-xs text-muted-foreground mt-1.5">
+              <span>Spent {formatCurrency(weekendSpent)}</span>
+              <span>Budget {formatCurrency(weekendBudget)}</span>
+            </div>
+          </div>
+        )}
 
         {/* Filters + view toggle + Add */}
         <div className="flex flex-wrap items-center gap-2">
@@ -296,6 +340,11 @@ export function TransactionsClient({ transactions: initial, categories, userId }
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm truncate">{t.title}</p>
+                        {weekendBudget > 0 && t.type === 'expense' && isWeekend(t.date) && (
+                          <Badge variant="secondary" className="text-[10px] shrink-0 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-0">
+                            🎉 weekend
+                          </Badge>
+                        )}
                         {t.emotional_tag && (
                           <Badge variant="secondary" className="text-[10px] shrink-0">
                             {EMOTIONAL_TAGS.find(e => e.value === t.emotional_tag)?.emoji} {t.emotional_tag}

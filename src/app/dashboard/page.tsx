@@ -55,6 +55,7 @@ export default async function DashboardPage() {
       investments={(investments ?? []) as Investment[]}
       categories={(categories ?? []) as Category[]}
       userId={user.id}
+      weekendBudget={(profile as Profile | null)?.weekend_budget ?? 0}
     />
   )
 }

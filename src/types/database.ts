@@ -16,6 +16,7 @@ export interface Database {
           pin_hash: string | null
           theme: string
           onboarding_completed: boolean
+          weekend_budget: number
           created_at: string
           updated_at: string
         }

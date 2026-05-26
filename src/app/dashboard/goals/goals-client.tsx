@@ -316,15 +316,35 @@ export function GoalsClient({ goals: initial, userId }: Props) {
       {/* Contribute Dialog */}
       <Dialog open={contributeOpen} onOpenChange={setContributeOpen}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Add Funds — {contributeGoal?.name}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>
+              Add Funds — {contributeGoal?.icon} {contributeGoal?.name}
+            </DialogTitle>
+          </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Current: {formatCurrency(contributeGoal?.current_amount ?? 0)} / {formatCurrency(contributeGoal?.target_amount ?? 0)}
-            </p>
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Saved so far</span>
+              <span className="font-medium text-foreground">
+                {formatCurrency(contributeGoal?.current_amount ?? 0)} / {formatCurrency(contributeGoal?.target_amount ?? 0)}
+              </span>
+            </div>
+            <Progress
+              value={getProgressPercentage(contributeGoal?.current_amount ?? 0, contributeGoal?.target_amount ?? 1)}
+              className="h-1.5"
+              style={{ '--progress-color': contributeGoal?.color } as React.CSSProperties}
+            />
             <div className="space-y-1.5">
               <Label>Amount (₹)</Label>
               <Input type="number" min="1" placeholder="500" value={contributeAmount} onChange={e => setContributeAmount(e.target.value)} />
             </div>
+            {contributeAmount && parseFloat(contributeAmount) > 0 && (
+              <div className="rounded-lg bg-amber-500/10 border border-amber-400/20 px-3 py-2.5 flex items-start gap-2">
+                <span className="text-sm">💸</span>
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  <span className="font-medium">{formatCurrency(parseFloat(contributeAmount))}</span> will be deducted from your available balance and logged as an expense.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setContributeOpen(false)}>Cancel</Button>

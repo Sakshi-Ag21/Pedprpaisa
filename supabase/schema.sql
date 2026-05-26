@@ -168,6 +168,11 @@ CREATE TABLE IF NOT EXISTS public.investments (
 );
 
 -- ============================================================
+-- MIGRATION: Weekend Budget (run once in Supabase SQL editor)
+-- ============================================================
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS weekend_budget DECIMAL(12, 2) DEFAULT 0;
+
+-- ============================================================
 -- INDEXES FOR PERFORMANCE
 -- ============================================================
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON public.transactions(user_id);

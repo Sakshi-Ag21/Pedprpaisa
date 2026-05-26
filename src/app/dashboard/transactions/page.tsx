@@ -7,7 +7,7 @@ export default async function TransactionsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const [{ data: transactions }, { data: categories }] = await Promise.all([
+  const [{ data: transactions }, { data: categories }, { data: profile }] = await Promise.all([
     supabase
       .from('transactions')
       .select('*, categories(name, icon, color)')
@@ -19,7 +19,19 @@ export default async function TransactionsPage() {
       .select('*')
       .or(`user_id.eq.${user.id},is_default.eq.true`)
       .order('name'),
+    supabase
+      .from('profiles')
+      .select('weekend_budget')
+      .eq('id', user.id)
+      .single(),
   ])
 
-  return <TransactionsClient transactions={transactions ?? []} categories={categories ?? []} userId={user.id} />
+  return (
+    <TransactionsClient
+      transactions={transactions ?? []}
+      categories={categories ?? []}
+      userId={user.id}
+      weekendBudget={profile?.weekend_budget ?? 0}
+    />
+  )
 }

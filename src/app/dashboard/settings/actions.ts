@@ -8,6 +8,7 @@ export async function saveProfile(data: {
   monthly_salary: number
   salary_date: number
   currency: string
+  weekend_budget: number
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
