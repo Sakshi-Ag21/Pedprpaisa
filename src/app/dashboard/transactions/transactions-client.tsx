@@ -46,6 +46,7 @@ export function TransactionsClient({ transactions: initial, categories, userId, 
   const [saving, setSaving] = useState(false)
   const [duplicating, setDuplicating] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<TxWithCat | null>(null)
   const [smsOpen, setSmsOpen] = useState(false)
   const [smsText, setSmsText] = useState('')
   const [smsError, setSmsError] = useState('')
@@ -197,14 +198,22 @@ export function TransactionsClient({ transactions: initial, categories, userId, 
     router.refresh()
   }
 
-  async function handleDelete(id: string) {
-    setDeleting(id)
-    const { error } = await supabase.from('transactions').delete().eq('id', id)
+  async function confirmDelete() {
+    if (!deleteTarget) return
+    const tx = deleteTarget
+    setDeleting(tx.id)
+    setDeleteTarget(null)
+    const { error } = await supabase.from('transactions').delete().eq('id', tx.id)
     if (error) {
       toast({ title: 'Error', description: error.message, variant: 'destructive' })
     } else {
-      setTransactions(prev => prev.filter(t => t.id !== id))
-      toast({ title: 'Transaction deleted' })
+      setTransactions(prev => prev.filter(t => t.id !== tx.id))
+      const amt = formatCurrency(tx.amount)
+      if (tx.type === 'expense') {
+        toast({ title: `${amt} back in your balance`, description: `"${tx.title}" removed from outflow` })
+      } else {
+        toast({ title: `${amt} removed from inflow`, description: `"${tx.title}" deleted` })
+      }
     }
     setDeleting(null)
     router.refresh()
@@ -368,7 +377,7 @@ export function TransactionsClient({ transactions: initial, categories, userId, 
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
                         <button
-                          onClick={() => handleDelete(t.id)}
+                          onClick={() => setDeleteTarget(t)}
                           disabled={deleting === t.id}
                           title="Delete"
                           className="rounded-md p-1.5 hover:bg-red-500/10 text-muted-foreground hover:text-red-500"
@@ -425,7 +434,7 @@ export function TransactionsClient({ transactions: initial, categories, userId, 
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button
-                              onClick={() => handleDelete(t.id)}
+                              onClick={() => setDeleteTarget(t)}
                               disabled={deleting === t.id}
                               title="Delete"
                               className="rounded-md p-1.5 hover:bg-red-500/10 text-muted-foreground hover:text-red-500"
@@ -443,6 +452,65 @@ export function TransactionsClient({ transactions: initial, categories, userId, 
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={v => { if (!v) setDeleteTarget(null) }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl font-light">Delete transaction?</DialogTitle>
+          </DialogHeader>
+          {deleteTarget && (
+            <div className="space-y-3">
+              {/* Transaction being deleted */}
+              <div className="flex items-center gap-3 rounded-xl bg-accent/60 px-3 py-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-background text-base shrink-0">
+                  {deleteTarget.categories?.icon ?? '✦'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{deleteTarget.title}</p>
+                  <p className="text-xs text-muted-foreground">{deleteTarget.categories?.name ?? 'Uncategorized'} · {formatDate(deleteTarget.date)}</p>
+                </div>
+                <p className={`text-sm font-semibold shrink-0 ${deleteTarget.type === 'income' ? 'text-green-500' : 'text-primary'}`}>
+                  {deleteTarget.type === 'income' ? '+' : '−'}{formatCurrency(deleteTarget.amount)}
+                </p>
+              </div>
+
+              {/* Impact */}
+              {deleteTarget.type === 'expense' ? (
+                <div className="rounded-lg bg-emerald-500/10 border border-emerald-400/20 px-3 py-2.5 flex items-start gap-2">
+                  <span className="text-base">💚</span>
+                  <div>
+                    <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                      {formatCurrency(deleteTarget.amount)} back in your balance
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Outflow will reduce by this amount</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg bg-red-500/10 border border-red-400/20 px-3 py-2.5 flex items-start gap-2">
+                  <span className="text-base">⚠️</span>
+                  <div>
+                    <p className="text-sm font-medium text-red-600 dark:text-red-400">
+                      {formatCurrency(deleteTarget.amount)} removed from inflow
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Your available balance will decrease</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={!!deleting}
+            >
+              {deleting ? 'Deleting…' : 'Yes, delete it'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* SMS Parser Dialog */}
       <Dialog open={smsOpen} onOpenChange={setSmsOpen}>
