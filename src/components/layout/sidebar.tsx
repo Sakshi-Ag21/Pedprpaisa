@@ -6,13 +6,14 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/components/providers/auth-provider'
 import {
   LayoutDashboard, ArrowLeftRight, Target, RefreshCw,
-  BarChart3, Settings, LogOut, TrendingUp, Menu, X,
+  BarChart3, Settings, LogOut, TrendingUp, Menu, X, Wallet,
 } from 'lucide-react'
 import { useState } from 'react'
 
 const NAV = [
   { href: '/dashboard', label: 'Sanctuary', icon: LayoutDashboard },
   { href: '/dashboard/transactions', label: 'Transactions', icon: ArrowLeftRight },
+  { href: '/dashboard/budget', label: 'Budget', icon: Wallet },
   { href: '/dashboard/goals', label: 'Visions', icon: Target },
   { href: '/dashboard/subscriptions', label: 'Rituals', icon: RefreshCw },
   { href: '/dashboard/investments', label: 'Portfolio', icon: TrendingUp },
