@@ -10,17 +10,35 @@ export default async function BudgetPage() {
 
   const { start, end } = getCurrentMonthRange()
 
-  const [{ data: transactions }, { data: goals }] = await Promise.all([
+  const [
+    { data: transactions },
+    { data: goals },
+    { data: categories },
+    { data: budgets },
+  ] = await Promise.all([
     supabase
       .from('transactions')
-      .select('amount, type, date')
+      .select('amount, type, date, category_id, categories(id, name, icon, color)')
       .eq('user_id', user.id)
       .gte('date', start)
       .lte('date', end),
-    supabase.from('goals').select('name, icon, color, current_amount, target_amount, auto_save_amount').eq('user_id', user.id).eq('status', 'active'),
+    supabase
+      .from('goals')
+      .select('name, icon, color, current_amount, target_amount, auto_save_amount')
+      .eq('user_id', user.id)
+      .eq('status', 'active'),
+    supabase
+      .from('categories')
+      .select('*')
+      .or(`user_id.eq.${user.id},is_default.eq.true`)
+      .order('name'),
+    supabase
+      .from('budgets')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_active', true),
   ])
 
-  // Fetch profile separately — weekend_budget may not exist until migration runs
   let monthlySalary = 0
   let weekendBudget = 0
   try {
@@ -33,8 +51,11 @@ export default async function BudgetPage() {
     <BudgetClient
       weekendBudget={weekendBudget}
       monthlySalary={monthlySalary}
-      transactions={transactions ?? []}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      transactions={(transactions ?? []) as any}
       goals={goals ?? []}
+      categories={categories ?? []}
+      budgets={budgets ?? []}
       userId={user.id}
     />
   )
