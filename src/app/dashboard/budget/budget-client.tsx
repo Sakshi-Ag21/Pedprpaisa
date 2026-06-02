@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/toaster'
-import { Pencil, TrendingDown, TrendingUp, Target, CalendarDays, Wallet, Plus, Trash2 } from 'lucide-react'
+import { Pencil, TrendingDown, TrendingUp, Target, CalendarDays, Wallet, Plus, Trash2, X } from 'lucide-react'
 import { formatCurrency, isWeekend, getProgressPercentage } from '@/lib/utils'
 import Link from 'next/link'
 import type { Budget, Category } from '@/types/database'
@@ -36,7 +36,7 @@ interface Props {
   userId: string
 }
 
-const EMPTY_BUDGET_FORM = { category_id: '', amount: '' }
+type BudgetRow = { category_id: string; amount: string }
 
 export function BudgetClient({ weekendBudget: initialWb, monthlySalary, transactions, goals, categories, budgets: initialBudgets, userId }: Props) {
   const [weekendBudget, setWeekendBudget] = useState(initialWb)
@@ -45,7 +45,8 @@ export function BudgetClient({ weekendBudget: initialWb, monthlySalary, transact
   const [wbEditValue, setWbEditValue] = useState(String(initialWb || ''))
   const [budgetDialogOpen, setBudgetDialogOpen] = useState(false)
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null)
-  const [budgetForm, setBudgetForm] = useState(EMPTY_BUDGET_FORM)
+  // Multi-row for Add mode; single-row for Edit mode
+  const [rows, setRows] = useState<BudgetRow[]>([{ category_id: '', amount: '' }])
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const supabase = createClient()
@@ -99,33 +100,46 @@ export function BudgetClient({ weekendBudget: initialWb, monthlySalary, transact
     setSaving(false)
   }
 
-  // ── Save category budget ──────────────────────────────────────────────
-  async function handleSaveBudget() {
-    if (!budgetForm.amount || parseFloat(budgetForm.amount) <= 0) {
-      toast({ title: 'Enter a budget amount', variant: 'destructive' })
-      return
-    }
-    setSaving(true)
+  // ── Row helpers ───────────────────────────────────────────────────────
+  function updateRow(i: number, field: keyof BudgetRow, value: string) {
+    setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
+  }
+  function addRow() {
+    setRows(prev => [...prev, { category_id: '', amount: '' }])
+  }
+  function removeRow(i: number) {
+    setRows(prev => prev.filter((_, idx) => idx !== i))
+  }
 
-    const cat = categories.find(c => c.id === budgetForm.category_id)
+  function openAdd() {
+    setEditingBudget(null)
+    setRows([{ category_id: '', amount: '' }])
+    setBudgetDialogOpen(true)
+  }
+
+  function openEdit(b: Budget) {
+    setEditingBudget(b)
+    setRows([{ category_id: b.category_id ?? '', amount: String(b.amount) }])
+    setBudgetDialogOpen(true)
+  }
+
+  // ── Save category budget(s) ───────────────────────────────────────────
+  async function handleSaveBudget() {
     const today = new Date().toISOString().split('T')[0]
-    const payload = {
-      category_id: budgetForm.category_id || null,
-      name: cat?.name ?? 'General',
-      amount: parseFloat(budgetForm.amount),
-      period: 'monthly' as const,
-      start_date: today,
-      alert_threshold: 80,
-      is_active: true,
-    }
 
     if (editingBudget) {
+      // Single-row edit
+      const row = rows[0]
+      if (!row.amount || parseFloat(row.amount) <= 0) {
+        toast({ title: 'Enter a budget amount', variant: 'destructive' }); return
+      }
+      setSaving(true)
+      const cat = categories.find(c => c.id === row.category_id)
       const { data, error } = await supabase
         .from('budgets')
-        .update({ amount: payload.amount, category_id: payload.category_id, name: payload.name })
+        .update({ amount: parseFloat(row.amount), category_id: row.category_id || null, name: cat?.name ?? editingBudget.name })
         .eq('id', editingBudget.id)
-        .select()
-        .single()
+        .select().single()
       if (error) {
         toast({ title: 'Error', description: error.message, variant: 'destructive' })
       } else {
@@ -134,16 +148,31 @@ export function BudgetClient({ weekendBudget: initialWb, monthlySalary, transact
         setBudgetDialogOpen(false)
       }
     } else {
-      const { data, error } = await supabase
-        .from('budgets')
-        .insert({ ...payload, user_id: userId })
-        .select()
-        .single()
+      // Multi-row insert
+      const valid = rows.filter(r => r.category_id && parseFloat(r.amount) > 0)
+      if (valid.length === 0) {
+        toast({ title: 'Add at least one category with an amount', variant: 'destructive' }); return
+      }
+      setSaving(true)
+      const inserts = valid.map(r => {
+        const cat = categories.find(c => c.id === r.category_id)
+        return {
+          user_id: userId,
+          category_id: r.category_id,
+          name: cat?.name ?? 'Budget',
+          amount: parseFloat(r.amount),
+          period: 'monthly' as const,
+          start_date: today,
+          alert_threshold: 80,
+          is_active: true,
+        }
+      })
+      const { data, error } = await supabase.from('budgets').insert(inserts).select()
       if (error) {
         toast({ title: 'Error', description: error.message, variant: 'destructive' })
       } else {
-        setBudgets(prev => [...prev, data as Budget])
-        toast({ title: 'Budget set!' })
+        setBudgets(prev => [...prev, ...(data as Budget[])])
+        toast({ title: `${inserts.length} budget${inserts.length > 1 ? 's' : ''} set!` })
         setBudgetDialogOpen(false)
       }
     }
@@ -162,18 +191,6 @@ export function BudgetClient({ weekendBudget: initialWb, monthlySalary, transact
     }
     setDeleting(null)
     router.refresh()
-  }
-
-  function openAdd() {
-    setEditingBudget(null)
-    setBudgetForm(EMPTY_BUDGET_FORM)
-    setBudgetDialogOpen(true)
-  }
-
-  function openEdit(b: Budget) {
-    setEditingBudget(b)
-    setBudgetForm({ category_id: b.category_id ?? '', amount: String(b.amount) })
-    setBudgetDialogOpen(true)
   }
 
   // ── Budget bar component ──────────────────────────────────────────────
@@ -334,8 +351,8 @@ export function BudgetClient({ weekendBudget: initialWb, monthlySalary, transact
                     <button
                       onClick={() => {
                         const cat = categories.find(cat => cat.name === c.name)
-                        setBudgetForm({ category_id: cat?.id ?? '', amount: '' })
                         setEditingBudget(null)
+                        setRows([{ category_id: cat?.id ?? '', amount: '' }])
                         setBudgetDialogOpen(true)
                       }}
                       className="text-xs text-primary hover:underline"
@@ -439,61 +456,85 @@ export function BudgetClient({ weekendBudget: initialWb, monthlySalary, transact
 
       {/* Add/Edit Category Budget Dialog */}
       <Dialog open={budgetDialogOpen} onOpenChange={v => { if (!v) setBudgetDialogOpen(false) }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="font-serif text-xl font-light">
-              {editingBudget ? 'Edit Budget' : 'Set Category Budget'}
+              {editingBudget ? 'Edit Budget' : 'Set Category Budgets'}
             </DialogTitle>
           </DialogHeader>
+
           <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Category</Label>
-              <Select
-                value={budgetForm.category_id}
-                onValueChange={v => setBudgetForm(f => ({ ...f, category_id: v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pick a category…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {expenseCategories
-                    .filter(c => editingBudget ? true : !budgetedCategoryIds.has(c.id))
-                    .map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.icon} {c.name}</SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+            {/* Column headers */}
+            <div className="grid grid-cols-[1fr_120px_28px] gap-2 px-0.5">
+              <Label className="text-xs text-muted-foreground">Category</Label>
+              <Label className="text-xs text-muted-foreground">Monthly limit (₹)</Label>
+              <span />
             </div>
-            <div className="space-y-1.5">
-              <Label>Monthly limit (₹)</Label>
-              <Input
-                type="number"
-                min="1"
-                placeholder="e.g. 4000"
-                value={budgetForm.amount}
-                onChange={e => setBudgetForm(f => ({ ...f, amount: e.target.value }))}
-                autoFocus={!budgetForm.category_id}
-              />
-            </div>
-            {budgetForm.category_id && budgetForm.amount && parseFloat(budgetForm.amount) > 0 && (() => {
-              const cat = categories.find(c => c.id === budgetForm.category_id)
-              const spent = categorySpending.get(budgetForm.category_id)?.spent ?? 0
-              const limit = parseFloat(budgetForm.amount)
-              return spent > 0 ? (
-                <div className="rounded-lg bg-accent/60 px-3 py-2 text-xs text-muted-foreground">
-                  You&apos;ve already spent <span className="font-medium text-foreground">{formatCurrency(spent)}</span> on {cat?.name} this month.{' '}
-                  {spent > limit
-                    ? <span className="text-red-400">That&apos;s already over this limit.</span>
-                    : <span className="text-emerald-500">{formatCurrency(limit - spent)} would remain.</span>
-                  }
+
+            {/* Rows */}
+            {rows.map((row, i) => {
+              const spent = row.category_id ? (categorySpending.get(row.category_id)?.spent ?? 0) : 0
+              const limit = parseFloat(row.amount) || 0
+              const over = limit > 0 && spent > limit
+              // In add mode, exclude categories already budgeted AND already picked in other rows
+              const pickedIds = new Set(rows.filter((_, idx) => idx !== i).map(r => r.category_id).filter(Boolean))
+              const availableCats = expenseCategories.filter(c =>
+                editingBudget ? true : !budgetedCategoryIds.has(c.id) && !pickedIds.has(c.id)
+              )
+              return (
+                <div key={i} className="space-y-1">
+                  <div className="grid grid-cols-[1fr_120px_28px] gap-2 items-center">
+                    <Select value={row.category_id} onValueChange={v => updateRow(i, 'category_id', v)}>
+                      <SelectTrigger className="text-sm">
+                        <SelectValue placeholder="Pick category…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableCats.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.icon} {c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number" min="1" placeholder="e.g. 4000"
+                      value={row.amount}
+                      onChange={e => updateRow(i, 'amount', e.target.value)}
+                      className="text-sm"
+                    />
+                    {rows.length > 1 && (
+                      <button onClick={() => removeRow(i)} className="flex items-center justify-center rounded p-1 hover:bg-red-500/10 text-muted-foreground hover:text-red-500">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    {rows.length === 1 && <span />}
+                  </div>
+                  {/* Inline spending hint */}
+                  {row.category_id && spent > 0 && limit > 0 && (
+                    <p className={`text-xs px-1 ${over ? 'text-red-400' : 'text-emerald-500'}`}>
+                      {over
+                        ? `Already ${formatCurrency(spent)} spent — over by ${formatCurrency(spent - limit)}`
+                        : `Already ${formatCurrency(spent)} spent · ${formatCurrency(limit - spent)} would remain`
+                      }
+                    </p>
+                  )}
                 </div>
-              ) : null
-            })()}
+              )
+            })}
+
+            {/* Add another row — only in Add mode */}
+            {!editingBudget && (
+              <button
+                onClick={addRow}
+                className="flex items-center gap-1.5 text-sm text-primary hover:underline mt-1"
+              >
+                <Plus className="h-3.5 w-3.5" /> Add another category
+              </button>
+            )}
           </div>
+
           <DialogFooter>
             <Button variant="ghost" onClick={() => setBudgetDialogOpen(false)}>Cancel</Button>
             <Button variant="gradient" onClick={handleSaveBudget} disabled={saving}>
-              {saving ? 'Saving…' : editingBudget ? 'Update' : 'Set Budget'}
+              {saving ? 'Saving…' : editingBudget ? 'Update' : `Save ${rows.filter(r => r.category_id && r.amount).length || ''} Budget${rows.filter(r => r.category_id && r.amount).length !== 1 ? 's' : ''}`}
             </Button>
           </DialogFooter>
         </DialogContent>
